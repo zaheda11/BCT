@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String         @id @default(cuid())
+  name              String
+  email             String         @unique
+  role              String
+  roleBeforeVerifier String?
+  walletAddress     String?        @unique
+  passwordHash      String
+  createdAt         DateTime       @default(now())
+  wills             Will[]
+  sessions          Session[]
+  walletChallenges WalletChallenge[]
+  beneficiaryRecords Beneficiary[]
+  uploadedDocuments Document[]
+  auditEvents       AuditEvent[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Will {
+  id             String              @id
+  testatorId     String
+  title          String
+  status         String              @default("ACTIVE")
+  contractId     String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  testator       User                @relation(fields: [testatorId], references: [id])
+  versions       WillVersion[]
+  assets         Asset[]
+  beneficiaries  Beneficiary[]
+  documents      Document[]
+  verifications  DeathVerification[]
+  inheritance    Inheritance?
+  claims         InheritanceClaim[]
+  transactions   BlockchainTransaction[]
+
+  @@index([testatorId, status])
+}
+
+model WillVersion {
+  id           String   @id @default(cuid())
+  willId       String
+  version      Int
+  documentHash String
+  txHash       String?
+  createdAt    DateTime @default(now())
+  will         Will     @relation(fields: [willId], references: [id], onDelete: Cascade)
+
+  @@unique([willId, version])
+}
+
+model Asset {
+  id                 String             @id @default(cuid())
+  willId             String
+  category           String
+  description        String
+  declaredValue      String?
+  ownershipReference String?
+  version            Int              @default(1)
+  will               Will               @relation(fields: [willId], references: [id], onDelete: Cascade)
+  allocations        AssetAllocation[]
+
+  @@index([willId, version])
+}
+
+model Beneficiary {
+  id            String             @id @default(cuid())
+  willId        String
+  userId        String?
+  name          String
+  relationship  String
+  walletAddress String
+  allocationBps Int
+  will          Will               @relation(fields: [willId], references: [id], onDelete: Cascade)
+  user          User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  allocations   AssetAllocation[]
+  claims        InheritanceClaim[]
+
+  @@unique([willId, walletAddress])
+  @@index([userId])
+}
+
+model AssetAllocation {
+  id            String      @id @default(cuid())
+  assetId       String
+  beneficiaryId String
+  allocationBps Int
+  asset         Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  beneficiary   Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, beneficiaryId])
+  @@index([assetId])
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  willId      String
+  filename    String
+  mimeType    String
+  sha256      String
+  kind        String   @default("WILL")
+  storagePath String   @unique
+  nonce       String
+  authTag     String
+  version     Int
+  uploadedById String?
+  claimId     String?
+  createdAt   DateTime @default(now())
+  will        Will     @relation(fields: [willId], references: [id], onDelete: Cascade)
+  uploadedBy  User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  claim       InheritanceClaim? @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([willId, version, createdAt])
+}
+
+model DeathVerification {
+  id            String   @id @default(cuid())
+  willId        String
+  referenceHash String
+  status        String   @default("PENDING")
+  txHash        String?
+  createdAt     DateTime @default(now())
+  will          Will     @relation(fields: [willId], references: [id], onDelete: Cascade)
+
+  @@index([willId, status])
+}
+
+model Inheritance {
+  id     String @id @default(cuid())
+  willId String @unique
+  status String @default("PENDING")
+  txHash String?
+  will   Will   @relation(fields: [willId], references: [id], onDelete: Cascade)
+}
+
+model InheritanceClaim {
+  id            String      @id @default(cuid())
+  willId        String
+  beneficiaryId String
+  status        String      @default("SUBMITTED")
+  details       String?
+  createdAt     DateTime    @default(now())
+  reviewedAt    DateTime?
+  will          Will        @relation(fields: [willId], references: [id], onDelete: Cascade)
+  beneficiary   Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  documents     Document[]
+
+  @@index([willId, status])
+  @@index([beneficiaryId, status])
+  @@unique([willId, beneficiaryId, status])
+}
+
+model BlockchainTransaction {
+  id        String   @id @default(cuid())
+  willId    String
+  action    String
+  txHash    String   @unique
+  status    String
+  createdAt DateTime @default(now())
+  will      Will     @relation(fields: [willId], references: [id], onDelete: Cascade)
+
+  @@index([willId, createdAt])
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorRole String
+  action    String
+  targetId  String?
+  details   String?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([targetId, createdAt])
+}
+
+model WalletChallenge {
+  id        String   @id @default(cuid())
+  userId    String
+  nonce     String   @unique
+  message   String
+  expiresAt DateTime
+  consumedAt DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}

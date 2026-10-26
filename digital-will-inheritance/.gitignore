@@ -1,0 +1,16 @@
+node_modules/
+.next/
+coverage/
+.env
+.env.*
+!.env.example
+prisma/dev.db
+prisma/dev.db-journal
+storage/**
+!storage/.gitkeep
+
+.hardhat-node.log
+.hardhat-node.err
+
+.next-dev.log
+.next-dev.err
